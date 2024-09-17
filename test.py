@@ -3,6 +3,9 @@ import google.generativeai as genai
 import os
 import json
 import re
+import hmac
+
+
 
 # Gemini APIの設定
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -21,6 +24,36 @@ if "current_question" not in st.session_state:
     st.session_state.current_question = 0
 if "score" not in st.session_state:
     st.session_state.score = 0
+
+
+# パスワード検証関数
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # パスワードをセッションステートから削除
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.text_input(
+            "パスワードを入力してください", type="password", on_change=password_entered, key="password"
+        )
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show input + error.
+        st.text_input(
+            "パスワードを入力してください", type="password", on_change=password_entered, key="password"
+        )
+        st.error("😕 パスワードが違います")
+        return False
+    else:
+        # Password correct.
+        return True
 
 
 # ローカルファイルの内容を抽出する関数
@@ -147,103 +180,59 @@ def generate_text_based_quiz(content, num_questions=5):
         return []
 
 
+def main():
+    # Streamlitアプリのタイトル
+    st.title("Gemini ChatBot with RAG and Quiz")
 
-# Streamlitアプリのタイトル
-st.title("Gemini ChatBot with RAG and Quiz")
+    # サイドバーにモード選択を追加
+    mode = st.sidebar.radio("モード選択", ["チャット", "4択クイズ", "文章問題"])
 
-# サイドバーにモード選択を追加
-mode = st.sidebar.radio("モード選択", ["チャット", "4択クイズ", "文章問題"])
+    # ファイルアップロード
+    uploaded_file = st.file_uploader("参照するファイルをアップロードしてください", type=['txt', 'pdf', 'docx'])
 
-# ファイルアップロード
-uploaded_file = st.file_uploader("参照するファイルをアップロードしてください", type=['txt', 'pdf', 'docx'])
+    if uploaded_file is not None:
+        file_content = extract_text_from_file(uploaded_file)
+        st.success(f"{uploaded_file.name} がアップロードされました。内容を参照して回答を生成します。")
 
-if uploaded_file is not None:
-    file_content = extract_text_from_file(uploaded_file)
-    st.success(f"{uploaded_file.name} がアップロードされました。内容を参照して回答を生成します。")
+    if mode == "チャット":
+        # ユーザー入力
+        user_input = st.text_input("メッセージを入力してください:")
 
-if mode == "チャット":
-    # ユーザー入力
-    user_input = st.text_input("メッセージを入力してください:")
+        # 送信ボタン
+        if st.button("送信"):
+            # ユーザーメッセージをチャット履歴に追加
+            st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 送信ボタン
-    if st.button("送信"):
-        # ユーザーメッセージをチャット履歴に追加
-        st.session_state.messages.append({"role": "user", "content": user_input})
-
-        # アップロードされたファイルがある場合、その内容を含めて質問を生成
-        if uploaded_file is not None:
-            prompt = f"以下の情報を参考にして質問に答えてください:\n\n{file_content}\n\n質問: {user_input}"
-        else:
-            prompt = user_input
-
-        # Gemini APIを使用して応答を生成
-        response = model.generate_content(prompt)
-
-        # ボットの応答をチャット履歴に追加
-        st.session_state.messages.append({"role": "assistant", "content": response.text})
-
-    # チャット履歴の表示
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            st.text_input("You:", value=message["content"], disabled=True)
-        else:
-            st.text_area("Bot:", value=message["content"], disabled=True)
-
-    # 履歴クリアボタン
-    if st.button("履歴をクリア"):
-        st.session_state.messages = []
-
-elif mode == "4択クイズ":
-    if uploaded_file is None:
-        st.warning("クイズを生成するには、まずファイルをアップロードしてください。")
-    else:
-        if "quiz_questions" not in st.session_state or len(st.session_state.quiz_questions) == 0:
-            if st.button("4択クイズを生成"):
-                st.session_state.quiz_questions = generate_multiple_choice_quiz(file_content)
-                st.session_state.current_question = 0
-                st.session_state.score = 0
-                st.session_state.quiz_completed = False
-                st.session_state.answered = False
-                st.session_state.last_answer_correct = None
-                st.rerun()
-
-        if "quiz_questions" in st.session_state and len(st.session_state.quiz_questions) > 0:
-            if not st.session_state.quiz_completed:
-                current_q = st.session_state.quiz_questions[st.session_state.current_question]
-                st.write(f"質問 {st.session_state.current_question + 1}:")
-                st.write(current_q["question"])
-                
-                user_answer = st.radio("答えを選択してください:", current_q["choices"], key=f"q_{st.session_state.current_question}")
-                
-                if not st.session_state.answered:
-                    if st.button("回答", key=f"submit_{st.session_state.current_question}"):
-                        is_correct = user_answer == current_q["correct_answer"]
-                        if is_correct:
-                            st.session_state.score += 1
-                        st.session_state.answered = True
-                        st.session_state.last_answer_correct = is_correct
-                        st.rerun()
-                else:
-                    if st.session_state.last_answer_correct:
-                        st.success("正解!")
-                    else:
-                        st.error(f"不正解。正解は: {current_q['correct_answer']}")
-                                    
-                    st.write("説明:")
-                    st.write(current_q['explanation'])
-
-                    if st.button("次の質問へ", key=f"next_{st.session_state.current_question}"):
-                        st.session_state.current_question += 1
-                        st.session_state.answered = False
-                        st.session_state.last_answer_correct = None
-                        if st.session_state.current_question >= len(st.session_state.quiz_questions):
-                            st.session_state.quiz_completed = True
-                        st.rerun()
-
+            # アップロードされたファイルがある場合、その内容を含めて質問を生成
+            if uploaded_file is not None:
+                prompt = f"以下の情報を参考にして質問に答えてください:\n\n{file_content}\n\n質問: {user_input}"
             else:
-                st.write(f"クイズ終了! あなたのスコア: {st.session_state.score}/{len(st.session_state.quiz_questions)}")
-                if st.button("クイズをリセット", key="reset_end"):
-                    st.session_state.quiz_questions = []
+                prompt = user_input
+
+            # Gemini APIを使用して応答を生成
+            response = model.generate_content(prompt)
+
+            # ボットの応答をチャット履歴に追加
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+
+        # チャット履歴の表示
+        for message in st.session_state.messages:
+            if message["role"] == "user":
+                st.text_input("You:", value=message["content"], disabled=True)
+            else:
+                st.text_area("Bot:", value=message["content"], disabled=True)
+
+        # 履歴クリアボタン
+        if st.button("履歴をクリア"):
+            st.session_state.messages = []
+
+    elif mode == "4択クイズ":
+        if uploaded_file is None:
+            st.warning("クイズを生成するには、まずファイルをアップロードしてください。")
+        else:
+            if "quiz_questions" not in st.session_state or len(st.session_state.quiz_questions) == 0:
+                if st.button("4択クイズを生成"):
+                    st.session_state.quiz_questions = generate_multiple_choice_quiz(file_content)
                     st.session_state.current_question = 0
                     st.session_state.score = 0
                     st.session_state.quiz_completed = False
@@ -251,60 +240,108 @@ elif mode == "4択クイズ":
                     st.session_state.last_answer_correct = None
                     st.rerun()
 
-elif mode == "文章問題":
-    if uploaded_file is None:
-        st.warning("問題を生成するには、まずファイルをアップロードしてください。")
-    else:
-        if "text_questions" not in st.session_state or len(st.session_state.text_questions) == 0:
-            if st.button("文章問題を生成"):
-                st.session_state.text_questions = generate_text_based_quiz(file_content)
-                st.session_state.current_question = 0
-                st.session_state.score = 0
-                st.session_state.quiz_completed = False
-                st.session_state.answered = False
-                st.rerun()
+            if "quiz_questions" in st.session_state and len(st.session_state.quiz_questions) > 0:
+                if not st.session_state.quiz_completed:
+                    current_q = st.session_state.quiz_questions[st.session_state.current_question]
+                    st.write(f"質問 {st.session_state.current_question + 1}:")
+                    st.write(current_q["question"])
+                    
+                    user_answer = st.radio("答えを選択してください:", current_q["choices"], key=f"q_{st.session_state.current_question}")
+                    
+                    if not st.session_state.answered:
+                        if st.button("回答", key=f"submit_{st.session_state.current_question}"):
+                            is_correct = user_answer == current_q["correct_answer"]
+                            if is_correct:
+                                st.session_state.score += 1
+                            st.session_state.answered = True
+                            st.session_state.last_answer_correct = is_correct
+                            st.rerun()
+                    else:
+                        if st.session_state.last_answer_correct:
+                            st.success("正解!")
+                        else:
+                            st.error(f"不正解。正解は: {current_q['correct_answer']}")
+                                        
+                        st.write("説明:")
+                        st.write(current_q['explanation'])
 
-        if "text_questions" in st.session_state and len(st.session_state.text_questions) > 0:
-            if not st.session_state.quiz_completed:
-                current_q = st.session_state.text_questions[st.session_state.current_question]
-                st.write(f"質問 {st.session_state.current_question + 1}:")
-                st.write(current_q["question"])
-                
-                user_answer = st.text_area("回答を入力してください:", key=f"q_{st.session_state.current_question}")
-                
-                if not st.session_state.answered:
-                    if st.button("回答", key=f"submit_{st.session_state.current_question}"):
-                        # 簡易的な採点（キーポイントの一致度で評価）
-                        key_points_matched = sum(point.lower() in user_answer.lower() for point in current_q["key_points"])
-                        score = key_points_matched / len(current_q["key_points"])
-                        st.session_state.score += score
-                        st.session_state.answered = True
-                        st.rerun()
+                        if st.button("次の質問へ", key=f"next_{st.session_state.current_question}"):
+                            st.session_state.current_question += 1
+                            st.session_state.answered = False
+                            st.session_state.last_answer_correct = None
+                            if st.session_state.current_question >= len(st.session_state.quiz_questions):
+                                st.session_state.quiz_completed = True
+                            st.rerun()
+
                 else:
-                    st.write("模範解答:")
-                    st.write(current_q['model_answer'])
-                    
-                    st.write("キーポイント:")
-                    for point in current_q['key_points']:
-                        st.write(f"- {point}")
-                    
-                    st.write("解説:")
-                    st.write(current_q['explanation'])
-
-                    if st.button("次の質問へ", key=f"next_{st.session_state.current_question}"):
-                        st.session_state.current_question += 1
+                    st.write(f"クイズ終了! あなたのスコア: {st.session_state.score}/{len(st.session_state.quiz_questions)}")
+                    if st.button("クイズをリセット", key="reset_end"):
+                        st.session_state.quiz_questions = []
+                        st.session_state.current_question = 0
+                        st.session_state.score = 0
+                        st.session_state.quiz_completed = False
                         st.session_state.answered = False
+                        st.session_state.last_answer_correct = None
+                        st.rerun()
+
+    elif mode == "文章問題":
+        if uploaded_file is None:
+            st.warning("問題を生成するには、まずファイルをアップロードしてください。")
+        else:
+            if "text_questions" not in st.session_state or len(st.session_state.text_questions) == 0:
+                if st.button("文章問題を生成"):
+                    st.session_state.text_questions = generate_text_based_quiz(file_content)
+                    st.session_state.current_question = 0
+                    st.session_state.score = 0
+                    st.session_state.quiz_completed = False
+                    st.session_state.answered = False
+                    st.rerun()
+
+            if "text_questions" in st.session_state and len(st.session_state.text_questions) > 0:
+                if not st.session_state.quiz_completed:
+                    current_q = st.session_state.text_questions[st.session_state.current_question]
+                    st.write(f"質問 {st.session_state.current_question + 1}:")
+                    st.write(current_q["question"])
+                    
+                    user_answer = st.text_area("回答を入力してください:", key=f"q_{st.session_state.current_question}")
+                    
+                    if not st.session_state.answered:
+                        if st.button("回答", key=f"submit_{st.session_state.current_question}"):
+                            # 簡易的な採点（キーポイントの一致度で評価）
+                            key_points_matched = sum(point.lower() in user_answer.lower() for point in current_q["key_points"])
+                            score = key_points_matched / len(current_q["key_points"])
+                            st.session_state.score += score
+                            st.session_state.answered = True
+                            st.rerun()
+                    else:
+                        st.write("模範解答:")
+                        st.write(current_q['model_answer'])
+                        
+                        st.write("キーポイント:")
+                        for point in current_q['key_points']:
+                            st.write(f"- {point}")
+                        
+                        st.write("解説:")
+                        st.write(current_q['explanation'])
+
+                        if st.button("次の質問へ", key=f"next_{st.session_state.current_question}"):
+                            st.session_state.current_question += 1
+                            st.session_state.answered = False
 
 
-# クイズリセットボタン（クイズモード以外でも表示）
-if ("quiz_questions" in st.session_state and len(st.session_state.quiz_questions) > 0) or \
-   ("text_questions" in st.session_state and len(st.session_state.text_questions) > 0):
-    if st.button("クイズをリセット", key="reset_global"):
-        st.session_state.quiz_questions = []
-        st.session_state.text_questions = []
-        st.session_state.current_question = 0
-        st.session_state.score = 0
-        st.session_state.quiz_completed = False
-        st.session_state.answered = False
-        st.session_state.last_answer_correct = None
-        st.rerun()
+    # クイズリセットボタン（クイズモード以外でも表示）
+    if ("quiz_questions" in st.session_state and len(st.session_state.quiz_questions) > 0) or \
+    ("text_questions" in st.session_state and len(st.session_state.text_questions) > 0):
+        if st.button("クイズをリセット", key="reset_global"):
+            st.session_state.quiz_questions = []
+            st.session_state.text_questions = []
+            st.session_state.current_question = 0
+            st.session_state.score = 0
+            st.session_state.quiz_completed = False
+            st.session_state.answered = False
+            st.session_state.last_answer_correct = None
+            st.rerun()
+
+# パスワード認証をチェックしてからメインアプリケーションを実行
+if check_password():
+    main()
