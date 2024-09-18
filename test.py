@@ -24,6 +24,8 @@ if "current_question" not in st.session_state:
     st.session_state.current_question = 0
 if "score" not in st.session_state:
     st.session_state.score = 0
+if "num_questions" not in st.session_state:
+    st.session_state.num_questions = 5  # デフォルトの問題数
 
 
 # パスワード検証関数
@@ -187,6 +189,9 @@ def main():
     # サイドバーにモード選択を追加
     mode = st.sidebar.radio("モード選択", ["チャット", "4択クイズ", "文章問題"])
 
+    # 出題数の設定
+    st.session_state.num_questions = st.sidebar.number_input("出題数", min_value=1, max_value=10, value=st.session_state.num_questions)
+
     # ファイルアップロード
     uploaded_file = st.file_uploader("参照するファイルをアップロードしてください", type=['txt', 'pdf', 'docx'])
 
@@ -232,7 +237,7 @@ def main():
         else:
             if "quiz_questions" not in st.session_state or len(st.session_state.quiz_questions) == 0:
                 if st.button("4択クイズを生成"):
-                    st.session_state.quiz_questions = generate_multiple_choice_quiz(file_content)
+                    st.session_state.quiz_questions = generate_multiple_choice_quiz(file_content, st.session_state.num_questions)
                     st.session_state.current_question = 0
                     st.session_state.score = 0
                     st.session_state.quiz_completed = False
@@ -290,7 +295,7 @@ def main():
         else:
             if "text_questions" not in st.session_state or len(st.session_state.text_questions) == 0:
                 if st.button("文章問題を生成"):
-                    st.session_state.text_questions = generate_text_based_quiz(file_content)
+                    st.session_state.text_questions = generate_text_based_quiz(file_content, st.session_state.num_questions)
                     st.session_state.current_question = 0
                     st.session_state.score = 0
                     st.session_state.quiz_completed = False
