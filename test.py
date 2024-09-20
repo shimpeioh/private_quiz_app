@@ -117,12 +117,12 @@ def generate_multiple_choice_quiz(content, num_questions=5):
 
     {{
         "questions": [
-            {
+            {{
                 "question": "問題文",
                 "choices": ["選択肢A", "選択肢B", "選択肢C", "選択肢D"],
                 "correct_answer": "正解の選択肢",
                 "explanation": "正解の詳細な根拠と説明、および他の選択肢が不正解である理由"
-            },
+            }},
             // 他の問題...
         ]
     }}
