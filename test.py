@@ -152,6 +152,44 @@ def generate_multiple_choice_quiz(content, num_questions=5):
         st.text(f"APIレスポンス: {response.text}")
         return []
 
+def enhance_quiz_difficulty(quiz_data, model):
+    enhanced_questions = []
+    
+    for question in quiz_data:
+        prompt = f"""
+        以下の4択問題をより高難度にしてください。ネット上の実例や論文情報を参考にし、以下の点に注意して問題を調整してください：
+
+        1. 問題の深さを増す：より専門的な知識や応用力を問う
+        2. 選択肢の複雑さを上げる：似通った選択肢を作成し、微妙な違いを識別する力を問う
+        3. 最新の研究成果や議論を反映：可能であれば、その分野の最新のトレンドや論争点を含める
+        4. 実世界との関連性を強化：理論的な知識を実践的な状況に適用する力を問う
+        5. 問題の構造を複雑化：複数の概念を組み合わせた問題を作成する
+
+        元の問題：
+        {json.dumps(question, ensure_ascii=False, indent=2)}
+
+        高難度版の問題をJSON形式で提供してください。フォーマットは元の問題と同じにしてください。
+        """
+
+        response = model.generate_content(prompt)
+        
+        # APIレスポンスからJSONらしき部分を抽出
+        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group()
+            try:
+                enhanced_question = json.loads(json_str)
+                enhanced_questions.append(enhanced_question)
+            except json.JSONDecodeError as e:
+                print(f"JSONのパースに失敗しました: {e}")
+                print(f"受け取ったJSON文字列: {json_str}")
+        else:
+            print("APIレスポンスからJSONを抽出できませんでした。")
+            print(f"APIレスポンス: {response.text}")
+
+    return enhanced_questions
+
+
 # 文章問題生成関数（新規追加）
 def generate_text_based_quiz(content, num_questions=5):
     prompt = f"""
@@ -255,9 +293,16 @@ def main():
         if uploaded_file is None:
             st.warning("クイズを生成するには、まずファイルをアップロードしてください。")
         else:
+            difficulty = st.radio("難易度を選択してください:", ["通常", "高難度"])
+            
             if "quiz_questions" not in st.session_state or len(st.session_state.quiz_questions) == 0:
                 if st.button("4択クイズを生成"):
                     st.session_state.quiz_questions = generate_multiple_choice_quiz(file_content, st.session_state.num_questions)
+
+                    if difficulty == "高難度":
+                        with st.spinner('高難度問題を生成中...'):
+                            st.session_state.quiz_questions = enhance_quiz_difficulty(st.session_state.quiz_questions, model)
+                            
                     st.session_state.current_question = 0
                     st.session_state.score = 0
                     st.session_state.quiz_completed = False
