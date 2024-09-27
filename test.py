@@ -11,7 +11,7 @@ import hmac
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # モデルの設定
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-002')
 
 # セッション状態の初期化
 if "messages" not in st.session_state:
@@ -251,7 +251,7 @@ def main():
     st.session_state.num_questions = st.sidebar.number_input("出題数", min_value=1, max_value=10, value=st.session_state.num_questions)
 
     # ファイルアップロード
-    uploaded_file = st.file_uploader("参照するファイルをアップロードしてください", type=['txt', 'pdf', 'docx'])
+    uploaded_file = st.sidebar.file_uploader("参照するファイルをアップロードしてください", type=['txt', 'pdf', 'docx'])
 
     if uploaded_file is not None:
         file_content = extract_text_from_file(uploaded_file)
