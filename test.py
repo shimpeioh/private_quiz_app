@@ -16,6 +16,8 @@ model = genai.GenerativeModel('gemini-1.5-flash-002')
 # セッション状態の初期化
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "chat" not in st.session_state:
+    st.session_state.chat = model.start_chat(history=[])
 if "quiz_questions" not in st.session_state:
     st.session_state.quiz_questions = []
 if "text_questions" not in st.session_state:
@@ -132,7 +134,7 @@ def generate_multiple_choice_quiz(content, num_questions=5):
     """
 
     with st.spinner('4択クイズを生成中...'):
-        response = model.generate_content(prompt)
+        response = st.session_state.chat.send_message(prompt)
     
     # APIレスポンスからJSONらしき部分を抽出
     json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
@@ -273,7 +275,7 @@ def main():
                 prompt = user_input
 
             # Gemini APIを使用して応答を生成
-            response = model.generate_content(prompt)
+            response = st.session_state.chat.send_message(prompt)
 
             # ボットの応答をチャット履歴に追加
             st.session_state.messages.append({"role": "assistant", "content": response.text})
@@ -288,6 +290,8 @@ def main():
         # 履歴クリアボタン
         if st.button("履歴をクリア"):
             st.session_state.messages = []
+            st.session_state.chat = model.start_chat(history=[])
+            st.rerun()
 
     elif mode == "4択クイズ":
         if uploaded_file is None:
@@ -410,6 +414,7 @@ def main():
             st.session_state.quiz_completed = False
             st.session_state.answered = False
             st.session_state.last_answer_correct = None
+            st.session_state.chat = model.start_chat(history=[])
             st.rerun()
 
 # パスワード認証をチェックしてからメインアプリケーションを実行
