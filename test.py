@@ -23,6 +23,35 @@ if 'file_uploaded' not in st.session_state:
 if 'english_converted' not in st.session_state:
     st.session_state.english_converted = False
 
+# パスワード検証関数
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # パスワードをセッションステートから削除
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.text_input(
+            "パスワードを入力してください", type="password", on_change=password_entered, key="password"
+        )
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show input + error.
+        st.text_input(
+            "パスワードを入力してください", type="password", on_change=password_entered, key="password"
+        )
+        st.error("😕 パスワードが違います")
+        return False
+    else:
+        # Password correct.
+        return True
+
 def reset_english_session():
     st.session_state.japanese_text = None
     st.session_state.english_text = None
@@ -125,4 +154,5 @@ def main():
             st.write(vocabulary)
 
 if __name__ == "__main__":
-    main()
+    if check_password():
+        main()
