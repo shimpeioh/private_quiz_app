@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import random
 from pathlib import Path
-
+import hmac
 
 
 # Gemini APIの設定
