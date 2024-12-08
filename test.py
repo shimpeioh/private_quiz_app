@@ -73,40 +73,68 @@ def create_text_image(text, width=800, height=400, font_size=80, is_english=True
     image = Image.new('RGB', (width, height), 'white')
     draw = ImageDraw.Draw(image)
     
-    try:
-        # StreamlitCloud (Linux) 環境での基本フォント
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-    except:
+    # 日本語と英語で異なるフォントを使用
+    if is_english:
         try:
-            # PIL組み込みのデフォルトフォント
-            font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+            # 英語用フォント
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
         except:
             try:
-                # フリーフォントをダウンロードして使用
-                import requests
-                import tempfile
-                import os
-
-                # Google Fontsからの代替フォント（NotoSansJP）
-                font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Bold.otf"
-                
-                # 一時ファイルとしてフォントをダウンロード
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.otf') as f:
-                    response = requests.get(font_url)
-                    f.write(response.content)
-                    font_path = f.name
-                
-                # ダウンロードしたフォントを使用
-                font = ImageFont.truetype(font_path, font_size)
-                
-                # 使用後に一時ファイルを削除
-                os.unlink(font_path)
+                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
             except:
-                # 最後の手段としてPILのデフォルトフォントを使用し、サイズを大きく
                 font = ImageFont.load_default()
-                font_size = 24  # デフォルトフォントの場合、サイズを固定
-    
-    # テキストを中央に配置
+                font_size = 24
+    else:
+        try:
+            # Ubuntu/Debian系の日本語フォント
+            font = ImageFont.truetype("/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc", font_size)
+        except:
+            try:
+                # Alpine Linuxの日本語フォント
+                font = ImageFont.truetype("/usr/share/fonts/noto/NotoSansCJK-Bold.ttc", font_size)
+            except:
+                try:
+                    # フォントがない場合、Google Fontsから日本語フォントをダウンロード
+                    import requests
+                    import tempfile
+                    import os
+
+                    # Noto Sans JP (Bold)をダウンロード
+                    font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Bold.otf"
+                    
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.otf') as f:
+                        response = requests.get(font_url)
+                        f.write(response.content)
+                        font_path = f.name
+                    
+                    font = ImageFont.truetype(font_path, font_size)
+                    
+                    # 一時ファイルを削除
+                    os.unlink(font_path)
+                except:
+                    # すべての方法が失敗した場合、IPAフォントをダウンロード（最後の手段）
+                    try:
+                        font_url = "https://moji.or.jp/wp-content/ipafont/IPAfont/ipag00303.zip"
+                        
+                        import zipfile
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as f:
+                            response = requests.get(font_url)
+                            f.write(response.content)
+                            zip_path = f.name
+                        
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                                zip_ref.extractall(temp_dir)
+                                font_path = os.path.join(temp_dir, 'ipag.ttf')
+                                font = ImageFont.truetype(font_path, font_size)
+                            
+                        os.unlink(zip_path)
+                    except:
+                        # 最後の手段が失敗した場合
+                        st.error("日本語フォントの読み込みに失敗しました。システム管理者に連絡してください。")
+                        return None
+
+    # テキストのサイズを取得して中央配置
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
@@ -116,14 +144,15 @@ def create_text_image(text, width=800, height=400, font_size=80, is_english=True
     # 英語は青、日本語は赤で表示
     text_color = 'blue' if is_english else 'red'
     
+    # フォントサイズに応じてオフセットを調整
+    offset = 2 if font_size >= 80 else 1
+    
     # 文字を太く見せるために同じ文字を少しずらして複数回描画
-    offset = 2 if font_size >= 80 else 1  # フォントサイズに応じてオフセットを調整
     for dx in [-offset, 0, offset]:
         for dy in [-offset, 0, offset]:
             draw.text((x + dx, y + dy), text, fill=text_color, font=font)
     
     return image
-
 def generate_long_text(keywords, target_score, word_count):
     prompt = f"""
     Create an English text about the following keywords: {keywords}
