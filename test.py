@@ -68,7 +68,7 @@ def regenerate_text():
     st.session_state.quiz_sentence = None
     st.session_state.english_converted = False
 
-def create_text_image(text, width=800, height=400, font_size=80, is_english=True):
+def create_text_image(text, width=800, height=400, font_size=120, is_english=True):
     """テキストを表示する画像を作成する関数"""
     image = Image.new('RGB', (width, height), 'white')
     draw = ImageDraw.Draw(image)
