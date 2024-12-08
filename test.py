@@ -100,7 +100,7 @@ def create_text_image(text, width=800, height=400, font_size=80, is_english=True
                     import os
 
                     # Noto Sans JP (Bold)をダウンロード
-                    font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansJP-Bold.otf"
+                    font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"
                     
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.otf') as f:
                         response = requests.get(font_url)
