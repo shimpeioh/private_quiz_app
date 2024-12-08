@@ -320,25 +320,42 @@ def main():
                     images = []
                     
                     for _, row in df.iterrows():
+                        # 英単語の画像を生成
                         eng_img = create_text_image(str(row[0]), is_english=True)
-                        images.append(eng_img)
+                        if eng_img is not None:
+                            # RGBモードに変換
+                            if eng_img.mode != 'P':
+                                eng_img = eng_img.convert('P', palette=Image.ADAPTIVE)
+                            images.append(eng_img)
                         
+                        # 日本語訳の画像を生成
                         jpn_img = create_text_image(str(row[1]), is_english=False)
-                        images.append(jpn_img)
+                        if jpn_img is not None:
+                            # RGBモードに変換
+                            if jpn_img.mode != 'P':
+                                jpn_img = jpn_img.convert('P', palette=Image.ADAPTIVE)
+                            images.append(jpn_img)
                     
-                    gif_buffer = BytesIO()
-                    images[0].save(
-                        gif_buffer,
-                        format='GIF',
-                        save_all=True,
-                        append_images=images[1:],
-                        duration=int(display_speed * 1000),
-                        loop=0
-                    )
-                    
-                    st.image(gif_buffer.getvalue())
-            else:
-                st.error('CSVファイルは少なくとも2列（英単語と日本語訳）が必要です。')
+                    if images:  # 画像が生成できた場合のみGIFを作成
+                        try:
+                            gif_buffer = BytesIO()
+                            # 最初の画像を保存
+                            images[0].save(
+                                gif_buffer,
+                                format='GIF',
+                                save_all=True,
+                                append_images=images[1:],
+                                duration=int(display_speed * 1000),
+                                loop=0,
+                                optimize=False  # 最適化を無効化
+                            )
+                            
+                            # GIFを表示
+                            st.image(gif_buffer.getvalue())
+                        except Exception as e:
+                            st.error(f"GIF生成中にエラーが発生しました: {str(e)}")
+                    else:
+                        st.error("画像の生成に失敗しました。")
        
 if __name__ == "__main__":
     if check_password():
