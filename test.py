@@ -68,7 +68,7 @@ def regenerate_text():
     st.session_state.quiz_sentence = None
     st.session_state.english_converted = False
 
-def create_text_image(text, width=800, height=400, font_size=80, is_english=True):
+def create_text_image(text, width=800, height=400, font_size=80, is_english=True, bold_offset=1):
     """テキストを表示する画像を作成する関数"""
     image = Image.new('RGB', (width, height), 'white')
     draw = ImageDraw.Draw(image)
@@ -130,7 +130,6 @@ def create_text_image(text, width=800, height=400, font_size=80, is_english=True
                             
                         os.unlink(zip_path)
                     except:
-                        # 最後の手段が失敗した場合
                         st.error("日本語フォントの読み込みに失敗しました。システム管理者に連絡してください。")
                         return None
 
@@ -144,15 +143,14 @@ def create_text_image(text, width=800, height=400, font_size=80, is_english=True
     # 英語は青、日本語は赤で表示
     text_color = 'blue' if is_english else 'red'
     
-    # フォントサイズに応じてオフセットを調整
-    offset = 2 if font_size >= 80 else 1
-    
     # 文字を太く見せるために同じ文字を少しずらして複数回描画
-    for dx in [-offset, 0, offset]:
-        for dy in [-offset, 0, offset]:
+    for dx in [-bold_offset, 0, bold_offset]:
+        for dy in [-bold_offset, 0, bold_offset]:
             draw.text((x + dx, y + dy), text, fill=text_color, font=font)
     
     return image
+
+
 def generate_long_text(keywords, target_score, word_count):
     prompt = f"""
     Create an English text about the following keywords: {keywords}
@@ -314,32 +312,44 @@ def main():
             df = pd.read_csv(uploaded_csv)
             
             if len(df.columns) >= 2:
-                display_speed = st.slider('表示速度（秒）', 1.0, 5.0, 2.0)
+                col1, col2 = st.columns(2)
+                with col1:
+                    display_speed = st.slider('表示速度（秒）', 1.0, 5.0, 2.0)
+                    font_size = st.slider('文字サイズ', 40, 120, 80, step=5)
+                with col2:
+                    bold_level = st.slider('文字の太さ', 1, 4, 2, step=1)
                 
                 if st.button('スタート', key="flashcard_start"):
                     images = []
                     
                     for _, row in df.iterrows():
                         # 英単語の画像を生成
-                        eng_img = create_text_image(str(row[0]), is_english=True)
+                        eng_img = create_text_image(
+                            str(row[0]), 
+                            is_english=True, 
+                            font_size=font_size,
+                            bold_offset=bold_level
+                        )
                         if eng_img is not None:
-                            # RGBモードに変換
                             if eng_img.mode != 'P':
                                 eng_img = eng_img.convert('P', palette=Image.ADAPTIVE)
                             images.append(eng_img)
                         
                         # 日本語訳の画像を生成
-                        jpn_img = create_text_image(str(row[1]), is_english=False)
+                        jpn_img = create_text_image(
+                            str(row[1]), 
+                            is_english=False,
+                            font_size=font_size,
+                            bold_offset=bold_level
+                        )
                         if jpn_img is not None:
-                            # RGBモードに変換
                             if jpn_img.mode != 'P':
                                 jpn_img = jpn_img.convert('P', palette=Image.ADAPTIVE)
                             images.append(jpn_img)
                     
-                    if images:  # 画像が生成できた場合のみGIFを作成
+                    if images:
                         try:
                             gif_buffer = BytesIO()
-                            # 最初の画像を保存
                             images[0].save(
                                 gif_buffer,
                                 format='GIF',
@@ -347,10 +357,9 @@ def main():
                                 append_images=images[1:],
                                 duration=int(display_speed * 1000),
                                 loop=0,
-                                optimize=False  # 最適化を無効化
+                                optimize=False
                             )
                             
-                            # GIFを表示
                             st.image(gif_buffer.getvalue())
                         except Exception as e:
                             st.error(f"GIF生成中にエラーが発生しました: {str(e)}")
