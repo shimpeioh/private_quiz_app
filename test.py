@@ -75,16 +75,16 @@ def generate_problems_with_gemini(words, sentence_pattern, num_questions, format
 - 各問題には日本語訳を付ける
 
 {format_instruction}の場合の出力形式：
-{
+{{
   "problems": [
-    {
+    {{
       "word": "使用した英単語",
       "japanese": "日本語訳",
       "english": "正解の英文",
       "scrambled": "並び替え用の単語リスト（並び替えの場合のみ）"
-    }
+    }}
   ]
-}
+}}
 
 注意事項：
 - 文型 {sentence_pattern} に必ず従ってください
