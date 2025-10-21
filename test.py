@@ -89,7 +89,7 @@ def initialize_gemini():
         # Streamlit Cloudのsecretsから取得
         api_key = st.secrets["GEMINI_API_KEY"]
         genai.configure(api_key=api_key)
-        return genai.GenerativeModel('gemini-2.5-flash')
+        return genai.GenerativeModel('gemini-2.5-flash-lite')
     except Exception as e:
         st.error(f"Gemini APIの初期化に失敗しました: {str(e)}")
         st.stop()
@@ -511,4 +511,5 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
+
 
