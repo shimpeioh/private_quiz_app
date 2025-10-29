@@ -125,6 +125,15 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
         audio_base64 = response.candidates[0].content.parts[0].inline_data.data
         pcm_bytes = base64.b64decode(audio_base64)
 
+        # sample_width * channels の倍数になるようにデータを調整
+        sample_width = 2  # 16bit
+        channels = 1
+        frame_size = sample_width * channels
+        
+        # データ長を frame_size の倍数に切り詰め
+        valid_length = (len(pcm_bytes) // frame_size) * frame_size
+        pcm_bytes = pcm_bytes[:valid_length]
+
         # pydub で PCM → WAV に変換
         audio = AudioSegment(
             data=pcm_bytes,
@@ -608,4 +617,5 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
