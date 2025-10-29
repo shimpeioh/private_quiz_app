@@ -106,6 +106,14 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
     Gemini TTS を使って音声データを生成し、WAV バイトデータとして返す
     """
     try:
+        # テキストの長さを確認
+        st.info(f"生成するテキスト長: {len(text)} 文字")
+        
+        # テキストが長すぎる場合は警告
+        if len(text) > 5000:
+            st.warning("テキストが長すぎます。最初の5000文字のみを使用します。")
+            text = text[:5000]
+        
         response = client.models.generate_content(
             model="gemini-2.5-flash-preview-tts",
             contents=text,
@@ -142,13 +150,18 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
         # Base64デコード
         try:
             audio_bytes = base64.b64decode(audio_base64)
-            st.info(f"デコード成功: {len(audio_bytes)} bytes")
+            st.info(f"デコード成功: {len(audio_bytes)} bytes ({len(audio_bytes)/48000:.2f}秒相当)")
         except Exception as e:
             st.error(f"Base64デコードエラー: {e}")
             return None
 
+        # データが極端に短い場合は警告
+        if len(audio_bytes) < 10000:
+            st.warning(f"⚠️ 音声データが異常に短いです ({len(audio_bytes)} bytes)")
+            st.info("テキストの最初の100文字: " + text[:100])
+
         # mime_typeに応じて処理を分岐
-        if 'pcm' in mime_type.lower():
+        if 'pcm' in mime_type.lower() or 'L16' in mime_type:
             # PCMデータの場合
             sample_width = 2  # 16bit
             channels = 1
@@ -168,7 +181,9 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
 
             wav_io = io.BytesIO()
             audio.export(wav_io, format="wav")
-            return wav_io.getvalue()
+            wav_bytes = wav_io.getvalue()
+            st.info(f"WAV変換完了: {len(wav_bytes)} bytes")
+            return wav_bytes
         else:
             # すでにWAVなどの形式の場合はそのまま返す
             st.info("PCM以外の形式として処理")
@@ -649,6 +664,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
 
 
