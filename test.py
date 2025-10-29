@@ -195,7 +195,6 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
         st.error(traceback.format_exc())
         return None
 
-
 # ログ機能
 def load_theme_log():
     try:
@@ -560,9 +559,35 @@ def render_gemini_tts_controls():
             if wav_bytes:
                 st.session_state.gemini_audio_data = wav_bytes
                 st.success("✅ 音声生成完了!")
+                st.rerun()  # 再生プレーヤーを確実に表示
     
     if st.session_state.gemini_audio_data:
-        st.audio(st.session_state.gemini_audio_data, format="audio/wav")
+        st.markdown("#### 🔊 音声プレーヤー")
+        try:
+            # BytesIOオブジェクトとして渡す
+            audio_io = io.BytesIO(st.session_state.gemini_audio_data)
+            st.audio(audio_io, format="audio/wav", start_time=0)
+            
+            # ダウンロードボタンも追加
+            st.download_button(
+                label="💾 音声をダウンロード",
+                data=st.session_state.gemini_audio_data,
+                file_name="gemini_tts_output.wav",
+                mime="audio/wav",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"音声再生エラー: {e}")
+            
+            # デバッグ用：HTMLオーディオタグで試す
+            audio_b64 = base64.b64encode(st.session_state.gemini_audio_data).decode()
+            audio_html = f"""
+            <audio controls style="width: 100%;">
+                <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav">
+                お使いのブラウザは音声再生に対応していません。
+            </audio>
+            """
+            st.markdown(audio_html, unsafe_allow_html=True)
 
 # メインUI
 st.title("🎧 英語リスニング・リーディング練習アプリ")
@@ -664,7 +689,3 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
-
-
-
-
