@@ -100,20 +100,15 @@ def initialize_gemini():
 
 client = initialize_gemini()
 
-# Gemini TTS関数
+
 def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
     """
-    Gemini TTS を使って音声データを生成し、WAV バイトデータとして返す
+    Gemini TTS で音声を生成し、
+    サンプルレートやチャンネル数を自動判定して
+    iPhone/Safari/Streamlit 互換の WAV に変換して返す
     """
     try:
-        # テキストの長さを確認
-        st.info(f"生成するテキスト長: {len(text)} 文字")
-        
-        # テキストが長すぎる場合は警告
-        if len(text) > 5000:
-            st.warning("テキストが長すぎます。最初の5000文字のみを使用します。")
-            text = text[:5000]
-        
+        # Gemini TTS 実行
         response = client.models.generate_content(
             model="gemini-2.5-flash-preview-tts",
             contents=text,
@@ -129,68 +124,56 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
             )
         )
 
-        # レスポンスの構造を確認
         if not response.candidates:
             st.error("音声データが返されませんでした")
             return None
-            
-        # inline_dataの取得を試みる
+
         part = response.candidates[0].content.parts[0]
-        
-        # inline_dataが存在するか確認
-        if hasattr(part, 'inline_data') and part.inline_data:
-            audio_base64 = part.inline_data.data
-            mime_type = part.inline_data.mime_type
-            st.info(f"受信した音声形式: {mime_type}")
-        else:
-            st.error("inline_dataが見つかりません")
-            st.write("レスポンス構造:", part)
+
+        if not hasattr(part, "inline_data") or not part.inline_data:
+            st.error("inline_data が見つかりません")
             return None
 
-        # Base64デコード
-        try:
-            audio_bytes = base64.b64decode(audio_base64)
-            st.info(f"デコード成功: {len(audio_bytes)} bytes ({len(audio_bytes)/48000:.2f}秒相当)")
-        except Exception as e:
-            st.error(f"Base64デコードエラー: {e}")
-            return None
+        audio_base64 = part.inline_data.data
+        mime_type = part.inline_data.mime_type
 
-        # データが極端に短い場合は警告
-        if len(audio_bytes) < 10000:
-            st.warning(f"⚠️ 音声データが異常に短いです ({len(audio_bytes)} bytes)")
-            st.info("テキストの最初の100文字: " + text[:100])
+        # Base64 → bytes
+        audio_bytes = base64.b64decode(audio_base64)
 
-        # mime_typeに応じて処理を分岐
-        if 'pcm' in mime_type.lower() or 'L16' in mime_type:
-            # PCMデータの場合
+        # PCM データの場合
+        if "pcm" in mime_type.lower() or "L16" in mime_type:
+            # Gemini のサンプルレート・チャンネルを自動判定
+            # (事前に返される情報がない場合は仮定値で読み込む)
             sample_width = 2  # 16bit
-            channels = 1
-            frame_size = sample_width * channels
-            
-            # データ長を frame_size の倍数に切り詰め
-            valid_length = (len(audio_bytes) // frame_size) * frame_size
-            audio_bytes = audio_bytes[:valid_length]
+            channels = 1      # デフォルトモノラル
+            frame_rate = 24000  # 仮定値
 
-            # pydub で PCM → WAV に変換
-            audio = AudioSegment(
-                data=audio_bytes,
+            # もし Gemini が metadata でサンプルレート情報を返していればここで使用
+            if hasattr(part.inline_data, "sample_rate_hz"):
+                frame_rate = part.inline_data.sample_rate_hz
+            if hasattr(part.inline_data, "channels"):
+                channels = part.inline_data.channels
+
+            audio = AudioSegment.from_raw(
+                io.BytesIO(audio_bytes),
                 sample_width=sample_width,
-                frame_rate=24000,
+                frame_rate=frame_rate,
                 channels=channels
             )
 
+            # iPhone/Safari 互換に変換（22050Hz, モノラル）
+            audio = audio.set_frame_rate(22050).set_channels(1)
+
             wav_io = io.BytesIO()
             audio.export(wav_io, format="wav")
-            wav_bytes = wav_io.getvalue()
-            st.info(f"WAV変換完了: {len(wav_bytes)} bytes")
-            return wav_bytes
+            return wav_io.getvalue()
+
         else:
-            # すでにWAVなどの形式の場合はそのまま返す
-            st.info("PCM以外の形式として処理")
+            # すでに WAV など互換性のある形式
             return audio_bytes
-            
+
     except Exception as e:
-        st.error(f"Gemini TTS生成エラー: {str(e)}")
+        st.error(f"TTS 生成エラー: {e}")
         import traceback
         st.error(traceback.format_exc())
         return None
