@@ -247,7 +247,7 @@ def generate_text(cefr_level, word_count):
             prompt += "\n\nOnly return the text passage without any additional explanations or metadata."
             
             response = client.models.generate_content(
-                model='gemini-2.5-flash-exp',
+                model='gemini-2.5-flash-lite',
                 contents=prompt
             )
             generated_text = response.text.strip()
@@ -608,3 +608,4 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
