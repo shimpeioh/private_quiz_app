@@ -4,7 +4,11 @@ import json
 import re
 import hmac
 from datetime import datetime
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+import base64
+import io
+from pydub import AudioSegment
 
 # ページ設定
 st.set_page_config(
@@ -20,32 +24,29 @@ def check_password():
         """Checks whether a password entered by the user is correct."""
         if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # パスワードをセッションステートから削除
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
     
     if "password_correct" not in st.session_state:
-        # First run, show input for password.
         st.text_input(
             "パスワードを入力してください", type="password", on_change=password_entered, key="password"
         )
         return False
     elif not st.session_state["password_correct"]:
-        # Password incorrect, show input + error.
         st.text_input(
             "パスワードを入力してください", type="password", on_change=password_entered, key="password"
         )
         st.error("😕 パスワードが違います")
         return False
     else:
-        # Password correct.
         return True
 
 # パスワードチェック
 if not check_password():
     st.stop()
 
-# カスタムCSS
+# カスタム CSS
 st.markdown("""
 <style>
     .stButton>button {
@@ -81,20 +82,63 @@ if 'text_visible' not in st.session_state:
     st.session_state.text_visible = False
 if 'log_file_path' not in st.session_state:
     st.session_state.log_file_path = "theme_log.json"
+if 'tts_mode' not in st.session_state:
+    st.session_state.tts_mode = "browser"
+if 'gemini_audio_data' not in st.session_state:
+    st.session_state.gemini_audio_data = None
 
 # Gemini API初期化
 @st.cache_resource
 def initialize_gemini():
     try:
-        # Streamlit Cloudのsecretsから取得
         api_key = st.secrets["GEMINI_API_KEY"]
-        genai.configure(api_key=api_key)
-        return genai.GenerativeModel('gemini-2.5-flash-lite')
+        client = genai.Client(api_key=api_key)
+        return client
     except Exception as e:
         st.error(f"Gemini APIの初期化に失敗しました: {str(e)}")
         st.stop()
 
-model = initialize_gemini()
+client = initialize_gemini()
+
+# Gemini TTS関数
+def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
+    """
+    Gemini TTS を使って音声データを生成し、WAV バイトデータとして返す
+    """
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-preview-tts",
+            contents=text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice_name
+                        )
+                    )
+                )
+            )
+        )
+
+        # Base64 → バイト
+        audio_base64 = response.candidates[0].content.parts[0].inline_data.data
+        pcm_bytes = base64.b64decode(audio_base64)
+
+        # pydub で PCM → WAV に変換
+        audio = AudioSegment(
+            data=pcm_bytes,
+            sample_width=2,  # 16bit
+            frame_rate=24000,
+            channels=1
+        )
+
+        wav_io = io.BytesIO()
+        audio.export(wav_io, format="wav")
+        return wav_io.getvalue()
+    except Exception as e:
+        st.error(f"Gemini TTS生成エラー: {str(e)}")
+        return None
 
 # ログ機能
 def load_theme_log():
@@ -142,7 +186,10 @@ def extract_theme_and_gender(text):
         性別: [male/female/neutral]
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash-lite',
+            contents=prompt
+        )
         result = response.text.strip()
         
         theme = "テーマ抽出に失敗しました"
@@ -199,7 +246,10 @@ def generate_text(cefr_level, word_count):
             
             prompt += "\n\nOnly return the text passage without any additional explanations or metadata."
             
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash-exp',
+                contents=prompt
+            )
             generated_text = response.text.strip()
             
             # テーマと性別を抽出
@@ -220,6 +270,7 @@ def generate_text(cefr_level, word_count):
             st.session_state.speaker_gender = gender
             st.session_state.text_visible = False
             st.session_state.show_original_text = True
+            st.session_state.gemini_audio_data = None  # 新しいテキスト生成時はオーディオをリセット
             
             st.success("文章の生成が完了しました!")
             
@@ -227,7 +278,7 @@ def generate_text(cefr_level, word_count):
             st.error(f"テキスト生成に失敗しました: {str(e)}")
 
 # Web Speech API用のJavaScript関数
-def render_speech_controls():
+def render_browser_speech_controls():
     display_text = st.session_state.generated_text
     if not st.session_state.show_original_text:
         display_text = hide_word_endings(display_text)
@@ -428,9 +479,38 @@ def render_speech_controls():
     
     st.components.v1.html(html_code, height=350)
 
+# Gemini TTS コントロール
+def render_gemini_tts_controls():
+    st.markdown("### 🎙️ Gemini TTS設定")
+    
+    voice_options = {
+        "Kore": "Kore (デフォルト)",
+        "Aoede": "Aoede",
+        "Charon": "Charon",
+        "Fenrir": "Fenrir",
+        "Puck": "Puck"
+    }
+    
+    selected_voice = st.selectbox(
+        "音声を選択",
+        options=list(voice_options.keys()),
+        format_func=lambda x: voice_options[x],
+        key="gemini_voice_select"
+    )
+    
+    if st.button("🎵 音声を生成", type="primary", use_container_width=True):
+        with st.spinner('Gemini TTSで音声を生成中...'):
+            wav_bytes = tts_generate(st.session_state.generated_text, voice_name=selected_voice)
+            if wav_bytes:
+                st.session_state.gemini_audio_data = wav_bytes
+                st.success("✅ 音声生成完了!")
+    
+    if st.session_state.gemini_audio_data:
+        st.audio(st.session_state.gemini_audio_data, format="audio/wav")
+
 # メインUI
 st.title("🎧 英語リスニング・リーディング練習アプリ")
-st.markdown("**Gemini AI**で文章を生成し、**ブラウザのWeb Speech API**で読み上げを行います")
+st.markdown("**Gemini AI**で文章を生成し、**ブラウザのWeb Speech API**または**Gemini TTS**で読み上げを行います")
 
 # サイドバー - パラメータ設定
 with st.sidebar:
@@ -452,6 +532,17 @@ with st.sidebar:
     
     if st.button("📝 文章を生成", type="primary", use_container_width=True):
         generate_text(cefr_level, word_count)
+    
+    st.markdown("---")
+    
+    st.header("🔊 音声生成方式")
+    tts_mode = st.radio(
+        "読み上げ方法を選択",
+        options=["browser", "gemini"],
+        format_func=lambda x: "ブラウザTTS (Web Speech API)" if x == "browser" else "Gemini TTS",
+        key="tts_mode_radio"
+    )
+    st.session_state.tts_mode = tts_mode
 
 # メインエリア
 if st.session_state.generated_text:
@@ -463,7 +554,11 @@ if st.session_state.generated_text:
     
     # 音声コントロール
     st.subheader("🔊 音声読み上げ")
-    render_speech_controls()
+    
+    if st.session_state.tts_mode == "browser":
+        render_browser_speech_controls()
+    else:
+        render_gemini_tts_controls()
     
     # テキスト表示コントロール
     st.markdown("---")
@@ -499,17 +594,17 @@ else:
         1. **サイドバー**でCEFRレベルと単語数を設定
         2. **文章を生成**ボタンをクリック
         3. 生成された文章が表示されます
-        4. **読み上げ速度**と**話者**を選択
-        5. **読み上げ開始**ボタンで音声再生
-        6. **テキストを表示**ボタンでテキストの確認
-        7. **単語を隠す**ボタンでリスニング練習
+        4. **音声生成方式**を選択（ブラウザTTS / Gemini TTS）
+        5. ブラウザTTS: **読み上げ速度**と**話者**を選択して**読み上げ開始**
+        6. Gemini TTS: **音声を選択**して**音声を生成**ボタンをクリック
+        7. **テキストを表示**ボタンでテキストの確認
+        8. **単語を隠す**ボタンでリスニング練習
         
-        ※ ブラウザのWeb Speech APIを使用しているため、インターネット接続が必要です
+        ※ ブラウザTTSはインターネット接続が必要です
+        ※ Gemini TTSは高品質な音声を生成しますが、生成に少し時間がかかります
         ※ 過去5件のテーマは自動的に避けられます
         """)
 
 # フッター
 st.markdown("---")
-st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
-
-
+st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
