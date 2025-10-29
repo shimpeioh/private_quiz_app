@@ -121,33 +121,65 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
             )
         )
 
-        # Base64 → バイト
-        audio_base64 = response.candidates[0].content.parts[0].inline_data.data
-        pcm_bytes = base64.b64decode(audio_base64)
-
-        # sample_width * channels の倍数になるようにデータを調整
-        sample_width = 2  # 16bit
-        channels = 1
-        frame_size = sample_width * channels
+        # レスポンスの構造を確認
+        if not response.candidates:
+            st.error("音声データが返されませんでした")
+            return None
+            
+        # inline_dataの取得を試みる
+        part = response.candidates[0].content.parts[0]
         
-        # データ長を frame_size の倍数に切り詰め
-        valid_length = (len(pcm_bytes) // frame_size) * frame_size
-        pcm_bytes = pcm_bytes[:valid_length]
+        # inline_dataが存在するか確認
+        if hasattr(part, 'inline_data') and part.inline_data:
+            audio_base64 = part.inline_data.data
+            mime_type = part.inline_data.mime_type
+            st.info(f"受信した音声形式: {mime_type}")
+        else:
+            st.error("inline_dataが見つかりません")
+            st.write("レスポンス構造:", part)
+            return None
 
-        # pydub で PCM → WAV に変換
-        audio = AudioSegment(
-            data=pcm_bytes,
-            sample_width=2,  # 16bit
-            frame_rate=24000,
-            channels=1
-        )
+        # Base64デコード
+        try:
+            audio_bytes = base64.b64decode(audio_base64)
+            st.info(f"デコード成功: {len(audio_bytes)} bytes")
+        except Exception as e:
+            st.error(f"Base64デコードエラー: {e}")
+            return None
 
-        wav_io = io.BytesIO()
-        audio.export(wav_io, format="wav")
-        return wav_io.getvalue()
+        # mime_typeに応じて処理を分岐
+        if 'pcm' in mime_type.lower():
+            # PCMデータの場合
+            sample_width = 2  # 16bit
+            channels = 1
+            frame_size = sample_width * channels
+            
+            # データ長を frame_size の倍数に切り詰め
+            valid_length = (len(audio_bytes) // frame_size) * frame_size
+            audio_bytes = audio_bytes[:valid_length]
+
+            # pydub で PCM → WAV に変換
+            audio = AudioSegment(
+                data=audio_bytes,
+                sample_width=sample_width,
+                frame_rate=24000,
+                channels=channels
+            )
+
+            wav_io = io.BytesIO()
+            audio.export(wav_io, format="wav")
+            return wav_io.getvalue()
+        else:
+            # すでにWAVなどの形式の場合はそのまま返す
+            st.info("PCM以外の形式として処理")
+            return audio_bytes
+            
     except Exception as e:
         st.error(f"Gemini TTS生成エラー: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
+
 
 # ログ機能
 def load_theme_log():
@@ -617,5 +649,6 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
 
