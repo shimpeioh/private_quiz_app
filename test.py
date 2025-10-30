@@ -154,8 +154,8 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
             if hasattr(part.inline_data, "channels"):
                 channels = part.inline_data.channels
             
-            st.info("frame_rate :", frame_rate)
-            st.info("channels :", channels)
+            st.info(f"frame_rate : {frame_rate}")
+            st.info(f"channels : {channels}")
 
             audio = AudioSegment.from_raw(
                 io.BytesIO(audio_bytes),
@@ -675,4 +675,5 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
