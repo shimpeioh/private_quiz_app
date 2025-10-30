@@ -10,6 +10,8 @@ import base64
 import io
 from pydub import AudioSegment
 
+import time
+
 # ページ設定
 st.set_page_config(
     page_title="英語リスニング練習アプリ",
@@ -154,8 +156,9 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
             if hasattr(part.inline_data, "channels"):
                 channels = part.inline_data.channels
             
-            print(f"frame_rate : {frame_rate}")
-            print(f"channels : {channels}")
+            st.info(f"frame_rate : {frame_rate}")
+            st.info(f"channels : {channels}")
+            time.sleep(5)
 
             audio = AudioSegment.from_raw(
                 io.BytesIO(audio_bytes),
@@ -675,6 +678,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
 
 
