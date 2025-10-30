@@ -555,8 +555,8 @@ def render_gemini_tts_controls():
         st.markdown("#### 🔊 音声プレーヤー")
         try:
             # BytesIOオブジェクトとして渡す
-            audio_io = io.BytesIO(st.session_state.gemini_audio_data)
-            st.audio(wav_bytes, format="audio/wav", start_time=0)
+            audio_io = st.session_state.gemini_audio_data
+            st.audio(audio_io, format="audio/wav", start_time=0)
             
             # ダウンロードボタンも追加
             st.download_button(
@@ -679,6 +679,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
 
 
