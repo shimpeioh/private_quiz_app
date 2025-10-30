@@ -7,10 +7,6 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 import base64
-import io
-from pydub import AudioSegment
-
-import time
 
 # ページ設定
 st.set_page_config(
@@ -86,8 +82,8 @@ if 'log_file_path' not in st.session_state:
     st.session_state.log_file_path = "theme_log.json"
 if 'tts_mode' not in st.session_state:
     st.session_state.tts_mode = "browser"
-if 'gemini_audio_data' not in st.session_state:
-    st.session_state.gemini_audio_data = None
+if 'gemini_audio_base64' not in st.session_state:
+    st.session_state.gemini_audio_base64 = None
 
 # Gemini API初期化
 @st.cache_resource
@@ -102,88 +98,52 @@ def initialize_gemini():
 
 client = initialize_gemini()
 
-
-def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
+# Gemini TTS関数 - Base64文字列を返す
+def tts_generate_base64(text: str, voice_name: str = "Kore") -> tuple:
     """
-    Gemini TTS で音声を生成し、
-    サンプルレートやチャンネル数を自動判定して
-    iPhone/Safari/Streamlit 互換の WAV に変換して返す
+    Gemini TTS を使って音声データを生成し、Base64文字列とMIMEタイプを返す
     """
     try:
-        # Gemini TTS 実行
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-tts",
-            contents=text,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name=voice_name
+        if len(text) > 5000:
+            st.warning("テキストが長すぎます。最初の5000文字のみを使用します。")
+            text = text[:5000]
+        
+        with st.spinner(f'Gemini TTSで音声を生成中... (Voice: {voice_name})'):
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-preview-tts",
+                contents=text,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=voice_name
+                            )
                         )
                     )
                 )
             )
-        )
 
-        if not response.candidates:
-            st.error("音声データが返されませんでした")
-            return None
-
-        part = response.candidates[0].content.parts[0]
-
-        if not hasattr(part, "inline_data") or not part.inline_data:
-            st.error("inline_data が見つかりません")
-            return None
-
-        audio_base64 = part.inline_data.data
-        mime_type = part.inline_data.mime_type
-
-        # Base64 → bytes
-        audio_bytes = base64.b64decode(audio_base64)
-
-        # PCM データの場合
-        if "pcm" in mime_type.lower() or "l16" in mime_type.lower():
-            # Gemini のサンプルレート・チャンネルを自動判定
-            # (事前に返される情報がない場合は仮定値で読み込む)
-            sample_width = 2  # 16bit
-            channels = 1      # デフォルトモノラル
-            frame_rate = 24000  # 仮定値
-
-            # もし Gemini が metadata でサンプルレート情報を返していればここで使用
-            if hasattr(part.inline_data, "sample_rate_hz"):
-                frame_rate = part.inline_data.sample_rate_hz
-            if hasattr(part.inline_data, "channels"):
-                channels = part.inline_data.channels
+            if not response.candidates:
+                st.error("音声データが返されませんでした")
+                return None, None
+                
+            part = response.candidates[0].content.parts[0]
             
-            #st.info(f"frame_rate : {frame_rate}")
-            #st.info(f"channels : {channels}")
-            #time.sleep(5)
-
-            audio = AudioSegment.from_raw(
-                io.BytesIO(audio_bytes),
-                sample_width=sample_width,
-                frame_rate=frame_rate,
-                channels=channels
-            )
-
-            # iPhone/Safari 互換に変換（22050Hz, モノラル）
-            # audio = audio.set_frame_rate(22050).set_channels(1)
-
-            wav_io = io.BytesIO()
-            audio.export(wav_io, format="wav")
-            wav_io.seek(0)
-            return wav_io
-
-        else:
-            # すでに WAV など互換性のある形式
-            return audio_bytes
-
+            if hasattr(part, 'inline_data') and part.inline_data:
+                audio_base64 = part.inline_data.data
+                mime_type = part.inline_data.mime_type
+                st.success(f"✅ 音声生成完了! (形式: {mime_type})")
+                return audio_base64, mime_type
+            else:
+                st.error("inline_dataが見つかりません")
+                return None, None
+            
     except Exception as e:
-        st.error(f"TTS 生成エラー: {e}")
+        st.error(f"Gemini TTS生成エラー: {str(e)}")
         import traceback
         st.error(traceback.format_exc())
-        return None
+        return None, None
 
 # ログ機能
 def load_theme_log():
@@ -232,7 +192,7 @@ def extract_theme_and_gender(text):
         """
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            model='gemini-2.5-flash-exp',
             contents=prompt
         )
         result = response.text.strip()
@@ -292,7 +252,7 @@ def generate_text(cefr_level, word_count):
             prompt += "\n\nOnly return the text passage without any additional explanations or metadata."
             
             response = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
+                model='gemini-2.5-flash-exp',
                 contents=prompt
             )
             generated_text = response.text.strip()
@@ -315,7 +275,7 @@ def generate_text(cefr_level, word_count):
             st.session_state.speaker_gender = gender
             st.session_state.text_visible = False
             st.session_state.show_original_text = True
-            st.session_state.gemini_audio_data = None  # 新しいテキスト生成時はオーディオをリセット
+            st.session_state.gemini_audio_base64 = None  # 新しいテキスト生成時はオーディオをリセット
             
             st.success("文章の生成が完了しました!")
             
@@ -524,7 +484,7 @@ def render_browser_speech_controls():
     
     st.components.v1.html(html_code, height=350)
 
-# Gemini TTS コントロール
+# Gemini TTS コントロール (HTML/JavaScript版)
 def render_gemini_tts_controls():
     st.markdown("### 🎙️ Gemini TTS設定")
     
@@ -544,40 +504,69 @@ def render_gemini_tts_controls():
     )
     
     if st.button("🎵 音声を生成", type="primary", use_container_width=True):
-        with st.spinner('Gemini TTSで音声を生成中...'):
-            wav_bytes = tts_generate(st.session_state.generated_text, voice_name=selected_voice)
-            if wav_bytes:
-                st.session_state.gemini_audio_data = wav_bytes
-                st.success("✅ 音声生成完了!")
-                st.rerun()  # 再生プレーヤーを確実に表示
+        audio_base64, mime_type = tts_generate_base64(st.session_state.generated_text, voice_name=selected_voice)
+        if audio_base64:
+            st.session_state.gemini_audio_base64 = audio_base64
+            st.session_state.gemini_mime_type = mime_type
+            st.rerun()
     
-    if st.session_state.gemini_audio_data:
-        st.markdown("#### 🔊 音声プレーヤー")
-        try:
-            # BytesIOオブジェクトとして渡す
-            audio_io = st.session_state.gemini_audio_data
-            st.audio(audio_io, format="audio/wav", start_time=0)
-            
-            # ダウンロードボタンも追加
-            st.download_button(
-                label="💾 音声をダウンロード",
-                data=st.session_state.gemini_audio_data,
-                file_name="gemini_tts_output.wav",
-                mime="audio/wav",
-                use_container_width=True
-            )
-        except Exception as e:
-            st.error(f"音声再生エラー: {e}")
-            
-            # デバッグ用：HTMLオーディオタグで試す
-            audio_b64 = base64.b64encode(st.session_state.gemini_audio_data).decode()
-            audio_html = f"""
-            <audio controls style="width: 100%;">
-                <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav">
+    # HTML/JavaScriptで音声プレーヤーを表示
+    if st.session_state.gemini_audio_base64:
+        st.markdown("#### 📊 音声プレーヤー")
+        
+        mime_type = st.session_state.get('gemini_mime_type', 'audio/wav')
+        
+        # PCM形式の場合は警告を表示
+        if 'pcm' in mime_type.lower() or 'L16' in mime_type:
+            st.warning("⚠️ PCM形式の音声です。ブラウザによっては再生できない場合があります。")
+        
+        audio_html = f"""
+        <div style="background-color: #f8f9fa; padding: 16px; border-radius: 8px; border: 1px solid #e8eaed;">
+            <audio id="geminiAudio" controls style="width: 100%; margin-bottom: 12px;">
+                <source src="data:{mime_type};base64,{st.session_state.gemini_audio_base64}" type="{mime_type}">
                 お使いのブラウザは音声再生に対応していません。
             </audio>
-            """
-            st.markdown(audio_html, unsafe_allow_html=True)
+            
+            <div style="display: flex; gap: 8px;">
+                <button onclick="document.getElementById('geminiAudio').playbackRate = 0.75" 
+                        style="flex: 1; padding: 8px; background: white; border: 2px solid #e8eaed; border-radius: 6px; cursor: pointer;">
+                    🐢 0.75x
+                </button>
+                <button onclick="document.getElementById('geminiAudio').playbackRate = 1.0" 
+                        style="flex: 1; padding: 8px; background: white; border: 2px solid #e8eaed; border-radius: 6px; cursor: pointer;">
+                    ▶️ 1.0x
+                </button>
+                <button onclick="document.getElementById('geminiAudio').playbackRate = 1.25" 
+                        style="flex: 1; padding: 8px; background: white; border: 2px solid #e8eaed; border-radius: 6px; cursor: pointer;">
+                    🐇 1.25x
+                </button>
+            </div>
+            
+            <div style="margin-top: 12px; font-size: 12px; color: #5f6368;">
+                形式: {mime_type}
+            </div>
+        </div>
+        
+        <script>
+            // 音声の長さを表示
+            document.getElementById('geminiAudio').addEventListener('loadedmetadata', function() {{
+                const duration = this.duration;
+                console.log('音声の長さ:', duration.toFixed(2), '秒');
+            }});
+        </script>
+        """
+        
+        st.components.v1.html(audio_html, height=150)
+        
+        # ダウンロードボタン
+        audio_bytes = base64.b64decode(st.session_state.gemini_audio_base64)
+        st.download_button(
+            label="💾 音声をダウンロード",
+            data=audio_bytes,
+            file_name=f"gemini_tts_{selected_voice}.wav",
+            mime=mime_type,
+            use_container_width=True
+        )
 
 # メインUI
 st.title("🎧 英語リスニング・リーディング練習アプリ")
@@ -606,7 +595,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.header("🔊 音声生成方式")
+    st.header("📊 音声生成方式")
     tts_mode = st.radio(
         "読み上げ方法を選択",
         options=["browser", "gemini"],
@@ -624,7 +613,7 @@ if st.session_state.generated_text:
     st.markdown(f'<div class="speaker-info">👤 話者: {gender_display}</div>', unsafe_allow_html=True)
     
     # 音声コントロール
-    st.subheader("🔊 音声読み上げ")
+    st.subheader("📊 音声読み上げ")
     
     if st.session_state.tts_mode == "browser":
         render_browser_speech_controls()
@@ -665,7 +654,7 @@ else:
         1. **サイドバー**でCEFRレベルと単語数を設定
         2. **文章を生成**ボタンをクリック
         3. 生成された文章が表示されます
-        4. **音声生成方式**を選択（ブラウザTTS / Gemini TTS）
+        4. **音声生成方式**を選択(ブラウザTTS / Gemini TTS)
         5. ブラウザTTS: **読み上げ速度**と**話者**を選択して**読み上げ開始**
         6. Gemini TTS: **音声を選択**して**音声を生成**ボタンをクリック
         7. **テキストを表示**ボタンでテキストの確認
@@ -673,16 +662,10 @@ else:
         
         ※ ブラウザTTSはインターネット接続が必要です
         ※ Gemini TTSは高品質な音声を生成しますが、生成に少し時間がかかります
+        ※ Gemini TTSの音声はHTML5オーディオプレーヤーで再生されます
         ※ 過去5件のテーマは自動的に避けられます
         """)
 
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
-
-
-
-
-
-
-
