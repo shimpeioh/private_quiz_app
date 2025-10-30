@@ -156,9 +156,9 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
             if hasattr(part.inline_data, "channels"):
                 channels = part.inline_data.channels
             
-            st.info(f"frame_rate : {frame_rate}")
-            st.info(f"channels : {channels}")
-            time.sleep(5)
+            #st.info(f"frame_rate : {frame_rate}")
+            #st.info(f"channels : {channels}")
+            #time.sleep(5)
 
             audio = AudioSegment.from_raw(
                 io.BytesIO(audio_bytes),
@@ -168,7 +168,7 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
             )
 
             # iPhone/Safari 互換に変換（22050Hz, モノラル）
-            audio = audio.set_frame_rate(22050).set_channels(1)
+            # audio = audio.set_frame_rate(22050).set_channels(1)
 
             wav_io = io.BytesIO()
             audio.export(wav_io, format="wav")
@@ -679,6 +679,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
 
 
