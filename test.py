@@ -143,7 +143,7 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
         audio_bytes = base64.b64decode(audio_base64)
 
         # PCM データの場合
-        if "pcm" in mime_type.lower() or "L16" in mime_type:
+        if "pcm" in mime_type.lower() or "l16" in mime_type.lower():
             # Gemini のサンプルレート・チャンネルを自動判定
             # (事前に返される情報がない場合は仮定値で読み込む)
             sample_width = 2  # 16bit
@@ -172,7 +172,8 @@ def tts_generate(text: str, voice_name: str = "Kore") -> bytes:
 
             wav_io = io.BytesIO()
             audio.export(wav_io, format="wav")
-            return wav_io.getvalue()
+            wav_io.seek(0)
+            return wav_io
 
         else:
             # すでに WAV など互換性のある形式
@@ -555,7 +556,7 @@ def render_gemini_tts_controls():
         try:
             # BytesIOオブジェクトとして渡す
             audio_io = io.BytesIO(st.session_state.gemini_audio_data)
-            st.audio(audio_io, format="audio/wav", start_time=0)
+            st.audio(wav_bytes, format="audio/wav", start_time=0)
             
             # ダウンロードボタンも追加
             st.download_button(
@@ -678,6 +679,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API / Gemini TTS 🗣️")
+
 
 
 
