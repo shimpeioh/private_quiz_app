@@ -4,7 +4,8 @@ import json
 import re
 import hmac
 from datetime import datetime
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # ページ設定
 st.set_page_config(
@@ -45,7 +46,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# カスタムCSS
+# カスタム CSS
 st.markdown("""
 <style>
     .stButton>button {
@@ -88,13 +89,13 @@ def initialize_gemini():
     try:
         # Streamlit Cloudのsecretsから取得
         api_key = st.secrets["GEMINI_API_KEY"]
-        genai.configure(api_key=api_key)
-        return genai.GenerativeModel('gemini-2.5-flash-lite')
+        client = genai.Client(api_key=api_key)
+        return client
     except Exception as e:
         st.error(f"Gemini APIの初期化に失敗しました: {str(e)}")
         st.stop()
 
-model = initialize_gemini()
+client = initialize_gemini()
 
 # ログ機能
 def load_theme_log():
@@ -142,7 +143,10 @@ def extract_theme_and_gender(text):
         性別: [male/female/neutral]
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash-lite',
+            contents=prompt
+        )
         result = response.text.strip()
         
         theme = "テーマ抽出に失敗しました"
@@ -199,7 +203,10 @@ def generate_text(cefr_level, word_count):
             
             prompt += "\n\nOnly return the text passage without any additional explanations or metadata."
             
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash-lite',
+                contents=prompt
+            )
             generated_text = response.text.strip()
             
             # テーマと性別を抽出
@@ -470,7 +477,7 @@ if st.session_state.generated_text:
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📄 テキストを表示/非表示", use_container_width=True):
+        if st.button("🔄 テキストを表示/非表示", use_container_width=True):
             st.session_state.text_visible = not st.session_state.text_visible
     
     with col2:
