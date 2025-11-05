@@ -1,5 +1,4 @@
 import streamlit as st
-import os
 import json
 import re
 import hmac
@@ -68,6 +67,13 @@ st.markdown("""
         line-height: 1.8;
         min-height: 200px;
     }
+    .study-guide {
+        padding: 20px;
+        background-color: #fff9e6;
+        border-radius: 8px;
+        border: 2px solid #ffd966;
+        margin-top: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,8 +86,12 @@ if 'show_original_text' not in st.session_state:
     st.session_state.show_original_text = True
 if 'text_visible' not in st.session_state:
     st.session_state.text_visible = False
-if 'log_file_path' not in st.session_state:
-    st.session_state.log_file_path = "theme_log.json"
+if 'theme_log' not in st.session_state:
+    st.session_state.theme_log = []
+if 'study_guide' not in st.session_state:
+    st.session_state.study_guide = ""
+if 'show_study_guide' not in st.session_state:
+    st.session_state.show_study_guide = False
 
 # Gemini API初期化
 @st.cache_resource
@@ -97,35 +107,20 @@ def initialize_gemini():
 
 client = initialize_gemini()
 
-# ログ機能
-def load_theme_log():
-    try:
-        if os.path.exists(st.session_state.log_file_path):
-            with open(st.session_state.log_file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return []
-    except Exception as e:
-        st.warning(f"ログファイル読み込みエラー: {e}")
-        return []
-
+# ログ機能(セッションベース)
 def save_theme_log(theme_entry):
-    try:
-        log_data = load_theme_log()
-        log_data.append(theme_entry)
-        with open(st.session_state.log_file_path, 'w', encoding='utf-8') as f:
-            json.dump(log_data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        st.warning(f"ログファイル保存エラー: {e}")
+    """セッションステートにログを保存"""
+    st.session_state.theme_log.append(theme_entry)
+    # 最新5件のみ保持
+    if len(st.session_state.theme_log) > 5:
+        st.session_state.theme_log = st.session_state.theme_log[-5:]
 
 def get_recent_themes(limit=5):
-    try:
-        log_data = load_theme_log()
-        if not log_data:
-            return []
-        recent_logs = log_data[-limit:] if len(log_data) >= limit else log_data
-        return [log_entry["theme"] for log_entry in recent_logs]
-    except Exception as e:
+    """最近のテーマを取得"""
+    if not st.session_state.theme_log:
         return []
+    recent_logs = st.session_state.theme_log[-limit:] if len(st.session_state.theme_log) >= limit else st.session_state.theme_log
+    return [log_entry["theme"] for log_entry in recent_logs]
 
 def extract_theme_and_gender(text):
     try:
@@ -144,7 +139,7 @@ def extract_theme_and_gender(text):
         """
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            model='gemini-2.0-flash-lite',
             contents=prompt
         )
         result = response.text.strip()
@@ -165,6 +160,67 @@ def extract_theme_and_gender(text):
     except Exception as e:
         st.warning(f"テーマ・性別抽出エラー: {e}")
         return "テーマ抽出に失敗しました", "neutral"
+
+def generate_study_guide(text, cefr_level):
+    """学習ガイドを生成"""
+    with st.spinner('学習ガイドを作成中...'):
+        try:
+            # CEFRレベルマッピング
+            level_map = {"A0": "入門", "A1": "初級", "A2": "初級上", "B1": "中級", "B2": "中級上", "C1": "上級"}
+            current_level = level_map.get(cefr_level, cefr_level)
+            
+            # 一つ下のレベルを想定
+            lower_levels = {"A1": "A0", "A2": "A1", "B1": "A2", "B2": "B1", "C1": "B2"}
+            target_level = lower_levels.get(cefr_level, "A1")
+            target_level_jp = level_map.get(target_level, target_level)
+            
+            prompt = f"""
+以下の英語文章について、CEFR {target_level}レベル({target_level_jp})の学習者向けの教育・解説用テキストをMarkdown形式で作成してください。
+
+文章:
+{text}
+
+以下の構成で、分かりやすく丁寧に解説してください:
+
+## 📚 文章の概要
+- この文章の主題と内容を簡単に説明
+
+## 🔤 重要単語・フレーズ
+- 重要な単語やフレーズを5-10個ピックアップ
+- 各単語について:
+  - **単語**: 意味(日本語)
+  - 例文(できれば元の文章から)
+  - 使い方のヒント
+
+## 📖 文法ポイント
+- この文章に含まれる重要な文法事項を2-3個説明
+- 各文法について:
+  - 文法名
+  - 説明と使い方
+  - 元の文章からの具体例
+
+## 💡 理解のコツ
+- この文章を理解するためのポイントや背景知識
+- 文化的な背景や文脈の説明
+
+## ✍️ 練習問題
+- 内容理解を確認する簡単な質問を2-3問
+- 単語や文法の応用練習
+
+全て日本語で、初学者にも分かりやすい表現を使ってください。
+"""
+            
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-lite',
+                contents=prompt
+            )
+            
+            study_guide = response.text.strip()
+            st.session_state.study_guide = study_guide
+            st.session_state.show_study_guide = True
+            
+        except Exception as e:
+            st.error(f"学習ガイドの生成に失敗しました: {str(e)}")
 
 def hide_word_endings(text):
     def hide_word(match):
@@ -204,7 +260,7 @@ def generate_text(cefr_level, word_count):
             prompt += "\n\nOnly return the text passage without any additional explanations or metadata."
             
             response = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
+                model='gemini-2.0-flash-lite',
                 contents=prompt
             )
             generated_text = response.text.strip()
@@ -227,6 +283,8 @@ def generate_text(cefr_level, word_count):
             st.session_state.speaker_gender = gender
             st.session_state.text_visible = False
             st.session_state.show_original_text = True
+            st.session_state.study_guide = ""
+            st.session_state.show_study_guide = False
             
             st.success("文章の生成が完了しました!")
             
@@ -457,7 +515,7 @@ with st.sidebar:
         step=10
     )
     
-    if st.button("📝 文章を生成", type="primary", use_container_width=True):
+    if st.button("🔍 文章を生成", type="primary", use_container_width=True):
         generate_text(cefr_level, word_count)
 
 # メインエリア
@@ -474,10 +532,10 @@ if st.session_state.generated_text:
     
     # テキスト表示コントロール
     st.markdown("---")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("🔄 テキストを表示/非表示", use_container_width=True):
+        if st.button("📄 テキストを表示/非表示", use_container_width=True):
             st.session_state.text_visible = not st.session_state.text_visible
     
     with col2:
@@ -488,6 +546,10 @@ if st.session_state.generated_text:
             ):
                 st.session_state.show_original_text = not st.session_state.show_original_text
     
+    with col3:
+        if st.button("📚 学習ガイド作成", use_container_width=True):
+            generate_study_guide(st.session_state.generated_text, cefr_level)
+    
     # テキスト表示エリア
     if st.session_state.text_visible:
         st.subheader("📖 生成されたテキスト")
@@ -496,6 +558,12 @@ if st.session_state.generated_text:
             display_text = hide_word_endings(display_text)
         
         st.markdown(f'<div class="text-display">{display_text}</div>', unsafe_allow_html=True)
+    
+    # 学習ガイド表示エリア
+    if st.session_state.show_study_guide and st.session_state.study_guide:
+        st.markdown("---")
+        st.subheader("📚 学習ガイド")
+        st.markdown(st.session_state.study_guide)
 
 else:
     st.info("👈 左のサイドバーから「文章を生成」ボタンをクリックして開始してください")
@@ -510,9 +578,11 @@ else:
         5. **読み上げ開始**ボタンで音声再生
         6. **テキストを表示**ボタンでテキストの確認
         7. **単語を隠す**ボタンでリスニング練習
+        8. **学習ガイド作成**で詳しい解説を表示
         
         ※ ブラウザのWeb Speech APIを使用しているため、インターネット接続が必要です
         ※ 過去5件のテーマは自動的に避けられます
+        ※ 学習ガイドは一つ下のCEFRレベルの学習者を対象に作成されます
         """)
 
 # フッター
