@@ -198,6 +198,7 @@ def generate_study_guide(text, cefr_level):
   - 各文の構造(SVOCM分解)
   - 各文の関係性
   - 文構造の読み方
+  - 各文の解説毎に改行を挿入
 
 ## 💡 理解のコツ
 - この文章を理解するためのポイントや背景知識
@@ -588,5 +589,6 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
+
 
 
