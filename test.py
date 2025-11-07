@@ -186,7 +186,7 @@ def generate_study_guide(text, cefr_level):
 - この文章の主題と内容を簡単に説明
 
 ## 🔤 重要単語・フレーズ
-- 重要な単語やフレーズを5-10個ピックアップ
+- 重要な単語やフレーズをピックアップ
 - 各単語について:
   - **単語**: 意味(日本語)
   - 例文(できれば元の文章から)
@@ -211,7 +211,7 @@ def generate_study_guide(text, cefr_level):
 """
             
             response = client.models.generate_content(
-                model='gemini-2.0-flash-lite',
+                model='gemini-2.0-flash',
                 contents=prompt
             )
             
@@ -588,3 +588,4 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
+
