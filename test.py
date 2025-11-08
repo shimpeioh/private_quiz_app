@@ -565,7 +565,7 @@ if st.session_state.generated_text:
     if st.session_state.show_study_guide and st.session_state.study_guide:
         st.markdown("---")
         st.subheader("📚 学習ガイド")
-        st.markdown(st.session_state.study_guide)
+        st.markdown(st.session_state.study_guide, unsafe_allow_html=False)
 
 else:
     st.info("👈 左のサイドバーから「文章を生成」ボタンをクリックして開始してください")
@@ -590,6 +590,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
+
 
 
 
