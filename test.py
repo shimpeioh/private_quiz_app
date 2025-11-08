@@ -176,8 +176,8 @@ def generate_study_guide(text, cefr_level):
             
             prompt = f"""
 以下の英語文章について、CEFR {target_level}レベル({target_level_jp})の学習者向けの教育・解説用テキストをCSS組み込みのHTML形式で作成してください。
-※ 表示環境はStreamlitCloudのmarkdown表示であることを考慮してください。
-※ 箇条書き指示後スペースは1つのみにしてください。
+※ デザインは Material Design を意識してください。
+※ 重要箇所には適度に配色を施してください。
 
 文章:
 {text}
@@ -591,6 +591,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
+
 
 
 
