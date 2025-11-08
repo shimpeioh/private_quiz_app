@@ -175,7 +175,7 @@ def generate_study_guide(text, cefr_level):
             target_level_jp = level_map.get(target_level, target_level)
             
             prompt = f"""
-以下の英語文章について、CEFR {target_level}レベル({target_level_jp})の学習者向けの教育・解説用テキストをMarkdown形式で作成してください。
+以下の英語文章について、CEFR {target_level}レベル({target_level_jp})の学習者向けの教育・解説用テキストをCSS組み込みのHTML形式で作成してください。
 ※ 表示環境はStreamlitCloudのmarkdown表示であることを考慮してください。
 ※ 箇条書き指示後スペースは1つのみにしてください。
 
@@ -566,7 +566,7 @@ if st.session_state.generated_text:
     if st.session_state.show_study_guide and st.session_state.study_guide:
         st.markdown("---")
         st.subheader("📚 学習ガイド")
-        st.markdown(st.session_state.study_guide, unsafe_allow_html=False)
+        st.html(st.session_state.study_guide)
 
 else:
     st.info("👈 左のサイドバーから「文章を生成」ボタンをクリックして開始してください")
@@ -591,6 +591,7 @@ else:
 # フッター
 st.markdown("---")
 st.markdown("Made with Streamlit 🎈 | Powered by Gemini AI 🤖 | Speech by Web Speech API 🗣️")
+
 
 
 
